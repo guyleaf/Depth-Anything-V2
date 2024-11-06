@@ -3,34 +3,36 @@ import logging
 import os
 import pprint
 import random
-
 import warnings
+
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
-from torch.utils.data import DataLoader
-from torch.optim import AdamW
 import torch.nn.functional as F
-from torch.utils.tensorboard import SummaryWriter
-
 from dataset.hypersim import Hypersim
 from dataset.kitti import KITTI
 from dataset.vkitti2 import VKITTI2
-from depth_anything_v2.dpt import DepthAnythingV2
+from torch.optim import AdamW
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from util.dist_helper import setup_distributed
 from util.loss import SiLogLoss
 from util.metric import eval_depth
-from util.utils import init_log
+from util.utils import init_log, none_or_str
 
+from depth_anything_v2.dpt import DepthAnythingV2
 
-parser = argparse.ArgumentParser(description='Depth Anything V2 for Metric Depth Estimation')
+parser = argparse.ArgumentParser(description='Depth Anything V2 for Metric Depth Estimation', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+parser.add_argument('root_dir')
+parser.add_argument('--val-root-dir', default=None, type=none_or_str)
 parser.add_argument('--encoder', default='vitl', choices=['vits', 'vitb', 'vitl', 'vitg'])
 parser.add_argument('--dataset', default='hypersim', choices=['hypersim', 'vkitti'])
 parser.add_argument('--img-size', default=518, type=int)
 parser.add_argument('--min-depth', default=0.001, type=float)
 parser.add_argument('--max-depth', default=20, type=float)
+parser.add_argument('--val-max-depth', default=None, type=float)
 parser.add_argument('--epochs', default=40, type=int)
 parser.add_argument('--bs', default=2, type=int)
 parser.add_argument('--lr', default=0.000005, type=float)
@@ -42,7 +44,11 @@ parser.add_argument('--port', default=None, type=int)
 
 def main():
     args = parser.parse_args()
-    
+    if args.val_root_dir is None:
+        args.val_root_dir = args.root_dir
+    if args.val_max_depth is None:
+        args.val_max_depth = args.max_depth
+
     warnings.simplefilter('ignore', np.RankWarning)
     
     logger = init_log('global', logging.INFO)
@@ -60,18 +66,18 @@ def main():
     
     size = (args.img_size, args.img_size)
     if args.dataset == 'hypersim':
-        trainset = Hypersim('dataset/splits/hypersim/train.txt', 'train', size=size)
+        trainset = Hypersim(args.root_dir, 'dataset/splits/hypersim/train.txt', 'train', size=size)
     elif args.dataset == 'vkitti':
-        trainset = VKITTI2('dataset/splits/vkitti2/train.txt', 'train', size=size)
+        trainset = VKITTI2(args.root_dir, 'dataset/splits/vkitti2/train.txt', 'train', size=size, max_depth=args.max_depth)
     else:
         raise NotImplementedError
     trainsampler = torch.utils.data.distributed.DistributedSampler(trainset)
     trainloader = DataLoader(trainset, batch_size=args.bs, pin_memory=True, num_workers=4, drop_last=True, sampler=trainsampler)
     
     if args.dataset == 'hypersim':
-        valset = Hypersim('dataset/splits/hypersim/val.txt', 'val', size=size)
+        valset = Hypersim(args.val_root_dir, 'dataset/splits/hypersim/val.txt', 'val', size=size)
     elif args.dataset == 'vkitti':
-        valset = KITTI('dataset/splits/kitti/val.txt', 'val', size=size)
+        valset = KITTI(args.val_root_dir, 'dataset/splits/kitti/val.txt', 'val', size=size)
     else:
         raise NotImplementedError
     valsampler = torch.utils.data.distributed.DistributedSampler(valset)
@@ -88,7 +94,7 @@ def main():
     model = DepthAnythingV2(**{**model_configs[args.encoder], 'max_depth': args.max_depth})
     
     if args.pretrained_from:
-        model.load_state_dict({k: v for k, v in torch.load(args.pretrained_from, map_location='cpu').items() if 'pretrained' in k}, strict=False)
+        model.load_state_dict({k: v for k, v in torch.load(args.pretrained_from, weights_only=True, map_location='cpu').items() if 'pretrained' in k}, strict=False)
     
     model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     model.cuda(local_rank)
@@ -165,7 +171,7 @@ def main():
                 pred = model(img)
                 pred = F.interpolate(pred[:, None], depth.shape[-2:], mode='bilinear', align_corners=True)[0, 0]
             
-            valid_mask = (valid_mask == 1) & (depth >= args.min_depth) & (depth <= args.max_depth)
+            valid_mask = (valid_mask == 1) & (depth >= args.min_depth) & (depth <= args.val_max_depth)
             
             if valid_mask.sum() < 10:
                 continue

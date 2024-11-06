@@ -1,4 +1,9 @@
 #!/bin/bash
+set -eu
+
+root_dir=$1
+val_root_dir=${2:-None}
+
 now=$(date +"%Y%m%d_%H%M%S")
 
 epoch=120
@@ -6,12 +11,13 @@ bs=4
 gpus=8
 lr=0.000005
 encoder=vitl
-dataset=hypersim # vkitti
+dataset=vkitti # vkitti
 img_size=518
 min_depth=0.001
-max_depth=20 # 80 for virtual kitti
+max_depth=655.35 # 80 for virtual kitti
+val_max_depth=80 # 80 for virtual kitti
 pretrained_from=../checkpoints/depth_anything_v2_${encoder}.pth
-save_path=exp/hypersim # exp/vkitti
+save_path=exp/vkitti # exp/vkitti
 
 mkdir -p $save_path
 
@@ -21,6 +27,6 @@ python3 -m torch.distributed.launch \
     --node_rank=0 \
     --master_addr=localhost \
     --master_port=20596 \
-    train.py --epoch $epoch --encoder $encoder --bs $bs --lr $lr --save-path $save_path --dataset $dataset \
-    --img-size $img_size --min-depth $min_depth --max-depth $max_depth --pretrained-from $pretrained_from \
-    --port 20596 2>&1 | tee -a $save_path/$now.log
+    train.py "$root_dir" --val-root-dir "$val_root_dir" --epoch $epoch --encoder $encoder --bs $bs --lr $lr --save-path $save_path --dataset $dataset \
+    --img-size $img_size --min-depth $min_depth --max-depth $max_depth --val-max-depth $val_max_depth --pretrained-from $pretrained_from \
+    --port 20596 2>&1 | tee -a "$save_path/$now.log"

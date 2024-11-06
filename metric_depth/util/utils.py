@@ -1,7 +1,5 @@
-import os
-import re
-import numpy as np
 import logging
+import os
 
 logs = set()
 
@@ -24,3 +22,8 @@ def init_log(name, level=logging.INFO):
     ch.setFormatter(formatter)
     logger.addHandler(ch)
     return logger
+
+def none_or_str(value: str):
+    if value.strip().lower() == "none":
+        return None
+    return value

@@ -1,19 +1,21 @@
+import os
+
 import cv2
 import torch
+from dataset.transform import NormalizeImage, PrepareForNet, Resize
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose
 
-from dataset.transform import Resize, NormalizeImage, PrepareForNet
-
 
 class KITTI(Dataset):
-    def __init__(self, filelist_path, mode, size=(518, 518)):
+    def __init__(self, root_dir, filelist_path, mode, size=(518, 518)):
         if mode != 'val':
             raise NotImplementedError
         
         self.mode = mode
         self.size = size
         
+        self.root_dir = root_dir
         with open(filelist_path, 'r') as f:
             self.filelist = f.read().splitlines()
         
@@ -33,8 +35,9 @@ class KITTI(Dataset):
         ])
     
     def __getitem__(self, item):
-        img_path = self.filelist[item].split(' ')[0]
-        depth_path = self.filelist[item].split(' ')[1]
+        img_path, depth_path = map(lambda path: os.path.join(self.root_dir, path), self.filelist[item].split(' '))
+        # img_path = self.filelist[item].split(' ')[0]
+        # depth_path = self.filelist[item].split(' ')[1]
         
         image = cv2.imread(img_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) / 255.0
