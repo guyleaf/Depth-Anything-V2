@@ -4,3 +4,8 @@ matplotlib
 opencv-python
 torch
 torchvision
+
+# convert_depth_anything_to_hf
+pillow
+transformers<5
+huggingface_hub
