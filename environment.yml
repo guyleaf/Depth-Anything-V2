@@ -1,0 +1,10 @@
+name: depth_anything_v2
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu121
+      - -r requirements.txt
+      - -r metric_depth/requirements.txt

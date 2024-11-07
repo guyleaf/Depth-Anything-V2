@@ -2,7 +2,7 @@ gradio_imageslider
 gradio==4.29.0
 matplotlib
 opencv-python
-torch
+torch<3
 torchvision
 
 # convert_depth_anything_to_hf

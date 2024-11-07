@@ -48,6 +48,9 @@ We provide **four models** of varying scales for robust relative depth estimatio
 ```bash
 git clone https://github.com/DepthAnything/Depth-Anything-V2
 cd Depth-Anything-V2
+# create a new conda env
+conda env create -f environment.yml
+# or install only
 pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
 ```
 
